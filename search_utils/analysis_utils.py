@@ -44,13 +44,11 @@ def get_scatter_plot_with_thumbnails(embeddings_2d,filenames,root='../'):
         img = np.expand_dims(img,0)
         img = functional.resize(torch.Tensor(img), thumbnail_size,antialias=True)
         img = np.array(img)[0,:,:]
-        img_box = osb.AnnotationBbox(
-            osb.OffsetImage(img, cmap=plt.cm.gray_r),
-            embeddings_2d[idx],
-            pad=0.2,
-        )
+        im = osb.OffsetImage(img, cmap=plt.cm.gray_r)
+        img_box = osb.AnnotationBbox(im,embeddings_2d[idx],pad=0.2)
         ax.add_artist(img_box)
-
+        im.get_children()[0].set_clim(-1000,1000)
+    
     # set aspect ratio
     ratio = 1.0 / ax.get_data_ratio()
     ax.set_aspect(ratio, adjustable="box")
