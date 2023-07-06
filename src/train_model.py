@@ -49,7 +49,8 @@ def main():
                  prediction_size=config.model['prediction_size'],
                  cosine_scheduler_start=config.training['momentum_start'],
                  cosine_scheduler_end=config.training['momentum_end'],
-                 loss=config.training['loss'])
+                 loss=config.training['loss'],
+                 epochs=config.training['epochs'])
 
     # initialize wandb logger
     wandb_logger = WandbLogger(log_model='all')
@@ -92,7 +93,6 @@ def main():
     fig2 = get_scatter_plot_with_thumbnails(embeddings_proj2D_train,files_train,'')
     wandb.log({"Projection_embeddings_2D_train": wandb.Image(fig2)})
 
-
     # save predictions for validation
     preds_val = trainer.predict(model=model,dataloaders=data.val_dataloader())
     files_val, embeddings_val,embeddings_proj_val = save_predictions(preds_val,wandb.run.dir,'val')
@@ -107,6 +107,12 @@ def main():
     embeddings_proj2d_val = scaler2.transform(embeddings_proj2d_val)
     fig4 = get_scatter_plot_with_thumbnails(embeddings_proj2d_val,files_val,'')
     wandb.log({"Projection_embeddings_2D_val": wandb.Image(fig4)})
+
+    preds_pseudotest = trainer.predict(model=model,dataloaders=data.pseudotest_dataloader())
+    files_pt, embeddings_pt,embeddings_proj_pt = save_predictions(preds_pseudotest,wandb.run.dir,'pseudotest')
+
+    preds_test = trainer.predict(model=model,dataloaders=data.test_dataloader())
+    files_test, embeddings_test,embeddings_proj_test = save_predictions(preds_test,wandb.run.dir,'test')
 
 
     wandb.finish()
