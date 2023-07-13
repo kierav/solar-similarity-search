@@ -1,3 +1,4 @@
+import argparse
 import glob
 import pandas as pd
 import numpy as np
@@ -150,3 +151,45 @@ class Assembler():
         """
         self.df.sort_values('sample_time',inplace=True)
         self.df.to_csv(dir+os.sep+'index_'+self.run+'_'+filename+'.csv',index=False)
+
+
+def parse_args(args=None):
+    """
+    Parses command line arguments to script. Sets up argument for which 
+    dataset to index.
+
+    Parameters:
+        args (list):    defaults to parsing any command line arguments
+    
+    Returns:
+        parser args:    Namespace from argparse
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-r','--run',
+                        type=str,
+                        help='wandb run id'
+                        )
+    parser.add_argument('-s','--datasets',
+                        type=str,
+                        nargs='*',
+                        default=['train','val','pseudotest','test'],
+                        help='datasets to assemble, i.e., train, val, etc.'
+                        )
+    parser.add_argument('-e','--embedding_dim',
+                        type=int,
+                        default=16,
+                        help='size of embedding to save'
+                        )
+    parser.add_argument('-d','--data_path',
+                        type=str,
+                        help='path to solve assembled files')
+    return parser.parse_args(args)
+
+
+
+if __name__ == '__main__':
+    parser = parse_args()
+    assembler = Assembler(embedding_dim=parser.embedding_dim,run=parser.run,datasets=parser.datasets,data_path=parser.data_path)
+    assembler.create_df()
+    assembler.assemble_all()
+    assembler.save_df('data','assembled')
