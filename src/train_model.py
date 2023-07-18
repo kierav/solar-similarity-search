@@ -29,7 +29,8 @@ def main():
     run = wandb.init(config=config,project=config['meta']['project'],
                         name=config['meta']['name'],
                         group=config['meta']['group'],
-                        tags=config['meta']['tags'])
+                        tags=config['meta']['tags'],
+                        )
     config = wandb.config
 
     # set seeds
@@ -39,7 +40,8 @@ def main():
     # define data module
     data = TilesDataModule(data_path=config.data['data_path'],
                            batch=config.training['batch_size'],
-                           augmentation=config.data['augmentation'])
+                           augmentation=config.data['augmentation'],
+                           normalize=config.model['pretrain'])
 
     # initialize model
     model = BYOL(lr=config.training['lr'],
@@ -50,13 +52,14 @@ def main():
                  cosine_scheduler_start=config.training['momentum_start'],
                  cosine_scheduler_end=config.training['momentum_end'],
                  loss=config.training['loss'],
-                 epochs=config.training['epochs'])
+                 epochs=config.training['epochs'],
+                 pretrain=config.model['pretrain'])
 
     # initialize wandb logger
     wandb_logger = WandbLogger(log_model='all')
     checkpoint_callback = ModelCheckpoint(monitor='val_loss',
                                           mode='min',
-                                          save_top_k=2,
+                                          save_top_k=1,
                                           save_last=True,
                                           save_weights_only=True,
                                           verbose=False)
@@ -66,8 +69,8 @@ def main():
                          devices=1,
                          max_epochs=config.training['epochs'],
                          log_every_n_steps=50,
-                        #  limit_train_batches=5,
-                        #  limit_test_batches=1,
+                         limit_train_batches=1000,
+                         limit_val_batches=200,
                          logger=wandb_logger,
                          deterministic=True)
     trainer.fit(model=model,datamodule=data)
