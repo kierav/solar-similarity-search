@@ -1,8 +1,10 @@
+import argparse
 import glob
 import pandas as pd
 import numpy as np
 import os
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import MinMaxScaler
 
 class Assembler():
     """
@@ -55,7 +57,7 @@ class Assembler():
                     
         return img
     
-    def reshape_embedding(self,embeddings,reducer,fit=True):
+    def reshape_embedding(self,embeddings,reducer,scaler,fit=True):
         """
         Reshape embedding to specified dimension either by some dimensionality reducer
         or by padding
@@ -63,14 +65,17 @@ class Assembler():
         Parameters:
             embeddings (array):     embeddings to be reshaped
             reducer (sklearn like): has a fit_transform and a transform method
+            scaler (sklearn like): has a fit_transform and a transform method
             fit (bool):             whether or not to fit the reducer
 
         Returns:
             embeddings (array):     reshaped to n samples x embedding dim 
         """
         if np.shape(embeddings)[1] > self.embedding_dim and fit:
+            embeddings = scaler.fit_transform(embeddings)
             embeddings = reducer.fit_transform(embeddings)
         elif np.shape(embeddings)[1] > self.embedding_dim and not fit:
+            embeddings = scaler.transform(embeddings)
             embeddings = reducer.transform(embeddings)
         else:
             embeddings = np.pad(embeddings,((0,0),(0,self.embedding_dim-np.shape(embeddings)[1])))
@@ -82,6 +87,8 @@ class Assembler():
         """
         pca = PCA(n_components=self.embedding_dim)
         pca_proj = PCA(n_components=self.embedding_dim)
+        scaler = MinMaxScaler()
+        scaler_proj = MinMaxScaler()
 
         for files,embeddings_file,embeddings_proj_file in zip(self.files,self.embedding_files,self.embeddings_proj_files):
             file_df = pd.read_csv(files)
@@ -93,19 +100,20 @@ class Assembler():
 
             if len(self.df)==0:
                 self.df = file_df
-                embeddings = self.reshape_embedding(embeddings,pca,fit=True)
-                embeddings_proj = self.reshape_embedding(embeddings_proj,pca_proj,fit=True)
+                embeddings = self.reshape_embedding(embeddings,pca,scaler,fit=True)
+                embeddings_proj = self.reshape_embedding(embeddings_proj,pca_proj,scaler_proj,fit=True)
                 self.embeddings = embeddings
                 self.embeddings_proj = embeddings_proj
 
             else:
                 self.df = pd.concat((self.df,file_df))
-                embeddings = self.reshape_embedding(embeddings,pca,fit=False)
-                embeddings_proj = self.reshape_embedding(embeddings_proj,pca_proj,fit=False)
+                embeddings = self.reshape_embedding(embeddings,pca,scaler,fit=False)
+                embeddings_proj = self.reshape_embedding(embeddings_proj,pca_proj,scaler_proj,fit=False)
                 self.embeddings = np.concatenate((self.embeddings,embeddings),axis=0)
                 self.embeddings_proj = np.concatenate((self.embeddings_proj,embeddings_proj),axis=0)
 
         self.df = self.df.reset_index(drop=True)
+        self.df['sample_time'] = pd.to_datetime(self.df['sample_time'],format='%Y%m%d_%H%M%S')
 
     def assemble_all(self):
         """
@@ -143,3 +151,45 @@ class Assembler():
         """
         self.df.sort_values('sample_time',inplace=True)
         self.df.to_csv(dir+os.sep+'index_'+self.run+'_'+filename+'.csv',index=False)
+
+
+def parse_args(args=None):
+    """
+    Parses command line arguments to script. Sets up argument for which 
+    dataset to index.
+
+    Parameters:
+        args (list):    defaults to parsing any command line arguments
+    
+    Returns:
+        parser args:    Namespace from argparse
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-r','--run',
+                        type=str,
+                        help='wandb run id'
+                        )
+    parser.add_argument('-s','--datasets',
+                        type=str,
+                        nargs='*',
+                        default=['train','val','pseudotest','test'],
+                        help='datasets to assemble, i.e., train, val, etc.'
+                        )
+    parser.add_argument('-e','--embedding_dim',
+                        type=int,
+                        default=16,
+                        help='size of embedding to save'
+                        )
+    parser.add_argument('-d','--data_path',
+                        type=str,
+                        help='path to solve assembled files')
+    return parser.parse_args(args)
+
+
+
+if __name__ == '__main__':
+    parser = parse_args()
+    assembler = Assembler(embedding_dim=parser.embedding_dim,run=parser.run,datasets=parser.datasets,data_path=parser.data_path)
+    assembler.create_df()
+    assembler.assemble_all()
+    assembler.save_df('data','assembled')
