@@ -164,8 +164,11 @@ cython_debug/
 *.json
 *.h5
 *.fits
+*.csv
 
 wandb/*
 *.ckpt
 
 handouts/*
+src/scripts/*
+notebooks/*

@@ -75,7 +75,7 @@ class TilesDataset(Dataset):
     """
     def __init__(self, image_files: list, transform, augmentation: str='single', 
                  instrument:str='mag',filetype:str='npy',
-                 datatype=np.float32):
+                 datatype=np.float32, normalize=False):
         '''
             Initializes image files in the dataset
             
@@ -97,6 +97,8 @@ class TilesDataset(Dataset):
         self.augmentation = augmentation
         if self.augmentation is None:
             self.augmentation = 'none'
+        self.norm = transforms.Normalize(mean=(0.485,),std=(0.229,))
+        self.normalize = normalize
 
     def __len__(self):
         '''
@@ -122,13 +124,13 @@ class TilesDataset(Dataset):
         '''
         file = self.image_files[idx]
         image = read_image(image_loc=file,image_format=self.filetype)
-        
+        image = np.nan_to_num(image)
         # Normalize magnetogram data
         # clip magnetogram data within max value
         maxval = 1000  # Gauss
         image[np.where(image>maxval)] = maxval
         image[np.where(image<-maxval)] = -maxval
-        # scale between -1 and 1
+        # scale between 0 and 1
         image = (image+maxval)/2/maxval
         image = np.expand_dims(image,0)
 
@@ -145,6 +147,9 @@ class TilesDataset(Dataset):
             if self.augmentation.lower() == 'double':
                 image = self.transform(image)    
 
+        if self.normalize:
+            image = self.norm(image)
+
         return file,image,image2
 
     
@@ -154,7 +159,8 @@ class TilesDataModule(pl.LightningDataModule):
     """
 
     def __init__(self,data_path:str,batch:int=128,augmentation:str='double',
-                 filetype:str='npy',dim:int=128,val_split:int=0,test:str=''):
+                 filetype:str='npy',dim:int=128,val_split:int=0,test:str='',
+                 normalize=False):
         super().__init__()
         self.data_path = data_path
         self.batch_size = batch
@@ -162,6 +168,7 @@ class TilesDataModule(pl.LightningDataModule):
         self.filetype = filetype
         self.val_split = val_split
         self.test = test
+        self.normalize = normalize
 
         # define data transforms - augmentation for training
         self.transform = transforms.Compose([
@@ -175,7 +182,7 @@ class TilesDataModule(pl.LightningDataModule):
                  ]),p=0.3),
             transforms.RandomVerticalFlip(p=0.3),
             transforms.ScaleJitter(target_size=(128,128),scale_range=(0.7,1.3),antialias=True),
-            transforms.Resize((dim,dim),antialias=True)
+            transforms.Resize((dim,dim),antialias=True),
         ])
 
     def prepare_data(self):
@@ -187,11 +194,11 @@ class TilesDataModule(pl.LightningDataModule):
     def setup(self,stage:str):
         # split into training and validation
         df_test,df_pseudotest,df_train,df_val = split_data(self.df,self.val_split,self.test)
-        self.train_set = TilesDataset(df_train['filename'].tolist(),self.transform,self.augmentation)
-        self.val_set = TilesDataset(df_val['filename'].tolist(),self.transform,augmentation='single')
-        self.pseudotest_set = TilesDataset(df_pseudotest['filename'].tolist(),self.transform,augmentation='none')
-        self.test_set = TilesDataset(df_test['filename'].tolist(),self.transform,augmentation='none')
-        self.trainval_set = TilesDataset(pd.concat([df_train,df_val])['filename'].tolist(),self.transform,augmentation='none')
+        self.train_set = TilesDataset(df_train['filename'].tolist(),self.transform,augmentation=self.augmentation,normalize=self.normalize)
+        self.val_set = TilesDataset(df_val['filename'].tolist(),self.transform,augmentation='single',normalize=self.normalize)
+        self.pseudotest_set = TilesDataset(df_pseudotest['filename'].tolist(),self.transform,augmentation='none',normalize=self.normalize)
+        self.test_set = TilesDataset(df_test['filename'].tolist(),self.transform,augmentation='none',normalize=self.normalize)
+        self.trainval_set = TilesDataset(pd.concat([df_train,df_val])['filename'].tolist(),self.transform,augmentation='none',normalize=self.normalize)
 
     def train_dataloader(self,shuffle=True):
         return DataLoader(self.train_set,batch_size=self.batch_size,num_workers=4,shuffle=shuffle)
@@ -199,5 +206,8 @@ class TilesDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.val_set,batch_size=self.batch_size,num_workers=4)
     
+    def pseudotest_dataloader(self):
+        return DataLoader(self.pseudotest_set,batch_size=self.batch_size,num_workers=4)
+    
     def test_dataloader(self):
-        return DataLoader(self.trainval_set,batch_size=self.batch_size,num_workers=4)
+        return DataLoader(self.test_set,batch_size=self.batch_size,num_workers=4)
