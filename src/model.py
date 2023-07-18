@@ -45,10 +45,14 @@ class BYOL(pl.LightningModule):
             epochs (int):               Number of epochs for scheduler
     """
     def __init__(self, lr=0.1, wd=1e-3, input_channels=1, projection_size=2, prediction_size=2, 
-                 cosine_scheduler_start=0.9, cosine_scheduler_end=1.0, epochs=10, loss='contrast'):
+                 cosine_scheduler_start=0.9, cosine_scheduler_end=1.0, epochs=10, loss='contrast',
+                 pretrain=False):
         super().__init__()
 
-        resnet = torchvision.models.resnet18()
+        if pretrain:
+            resnet = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
+        else:
+            resnet = torchvision.models.resnet18()
         # change number of input channels 
         resnet.conv1 = nn.Conv2d(input_channels,64,kernel_size=(7,7),stride=(2,2),padding=(1,1),bias=False)
         self.backbone = nn.Sequential(*list(resnet.children())[:-1])

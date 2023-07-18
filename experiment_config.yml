@@ -1,27 +1,27 @@
 data:
   augmentation: double
-  data_path: data/tiles_HMI_small
+  data_path: data/tiles_all
 meta:
-  project: solar-self-similarity
-  name: nxtent-loss
-  group: debug
-  tags: []
-  resume: false
+  group: all_tiles_initial_exp
+  name: cos_bs256_projpredsize128_pt
   outdir: ''
+  project: solar-self-similarity
+  resume: false
+  tags: []
 model:
-  checkpoint_location: None
-  dropout_ratio: 0
-  load_checkpoint: false
-  projection_size: 2
-  prediction_size: 2
   channels: 1
+  checkpoint_location: None
+  load_checkpoint: false
+  prediction_size: 128
+  projection_size: 128
+  pretrain: True
 testing:
   eval: false
 training:
   batch_size: 256
-  epochs: 30
-  lr: 0.01
-  wd: 0.0001
-  momentum_start: 0.99
+  epochs: 10
+  loss: cos
+  lr: 0.1
   momentum_end: 1
-  loss: 'contrast'
+  momentum_start: 0.99
+  wd: 0.0001
