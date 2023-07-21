@@ -6,6 +6,8 @@ import numpy as np
 import os
 import torch
 import torchvision.transforms.functional as functional
+from sklearn.metrics.pairwise import cosine_similarity
+from image_utils import read_image
 
 
 def get_scatter_plot_with_thumbnails(embeddings_2d,filenames,root='../'):
@@ -40,7 +42,10 @@ def get_scatter_plot_with_thumbnails(embeddings_2d,filenames,root='../'):
     # plot image overlays
     for idx in shown_images_idx:
         thumbnail_size = int(rcp["figure.figsize"][0] * 2.0)
-        img = np.load(root+filenames[idx])
+        try:
+            img = np.load(root+filenames[idx])
+        except:
+            continue
         img = np.expand_dims(img,0)
         img = functional.resize(torch.Tensor(img), thumbnail_size,antialias=True)
         img = np.array(img)[0,:,:]
@@ -63,6 +68,60 @@ def get_scatter_plot_with_thumbnails(embeddings_2d,filenames,root='../'):
     ax2.set_title('Density distribution in 2D')
 
     return fig
+
+def get_image_as_np_array_with_frame(filename: str, w: int = 5):
+    """Returns an image as a numpy array with a black frame of width w."""
+    img =  read_image(image_loc=filename, image_format = "npy")
+    ny, nx = img.shape
+    # create an empty image with padding for the frame
+    framed_img = -1000*np.ones((w + ny + w, w + nx + w))
+    # put the original image in the middle of the new one
+    framed_img[w:-w, w:-w] = img
+    return framed_img
+
+
+def plot_nearest_neighbors_3x3(filenames, embeddings, query, query_type: str, i: int, distType: str, root:str='../'):
+    """Plots the example image and its eight nearest neighbors."""
+    n_subplots = 9
+    # initialize empty figure
+    fig = plt.figure()
+    fig.suptitle(f"Nearest Neighbor Plot {i + 1} with {distType} distance")
+    #
+    if query_type == 'filename':
+        example_idx = np.where(filenames==query)[0]
+        print(query)
+        embedding_query = embeddings[example_idx,:]
+    else:
+        embedding_query = np.reshape(query,(1,np.shape(query)[0]))
+
+    # get distances to the cluster center
+    distances = []
+    if distType.upper() == "EUCLIDEAN":
+        distances = embeddings - embedding_query
+        distances = np.power(distances, 2).sum(-1).squeeze()
+    elif distType.upper() == "COSINE":
+        distances = -1*cosine_similarity(embeddings, embedding_query)
+        distances = distances[:, 0]
+        # distances = [cosine_similarity(np.array([embeddings[i, :]]), np.array([embeddings[example_idx, :]]))[0][0] for i in range(len(embeddings))]
+
+    # sort indices by distance to the center
+    nearest_neighbors = np.argsort(distances)[:n_subplots]
+    # show images
+    for plot_offset, plot_idx in enumerate(nearest_neighbors):
+        ax = fig.add_subplot(3, 3, plot_offset + 1)
+        # get the corresponding filename
+        fname = root + filenames[plot_idx]
+        if plot_offset == 0:
+            if query_type == 'filename':
+                ax.set_title(f"Query Image")
+            else:
+                ax.set_title(f"Nearest neighbor")
+            plt.imshow(get_image_as_np_array_with_frame(fname),cmap='gray',vmin=-1000,vmax=1000)
+        else:
+            plt.imshow(read_image(image_loc=fname, image_format = "npy"),cmap='gray',vmin=-1000,vmax=1000)
+        # let's disable the axis
+        plt.axis("off")
+
 
 def save_predictions(preds,dir,appendstr:str=''):
     """
