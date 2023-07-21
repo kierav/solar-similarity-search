@@ -69,15 +69,23 @@ def main():
                          devices=1,
                          max_epochs=config.training['epochs'],
                          log_every_n_steps=50,
-                         limit_train_batches=1000,
-                         limit_val_batches=200,
+                        #  limit_train_batches=1000,
+                         limit_val_batches=400,
                          logger=wandb_logger,
-                         deterministic=True)
+                         deterministic=True,
+                         precision=16)
     trainer.fit(model=model,datamodule=data)
 
     # save predictions for training
+    api = wandb.Api()
+    model = load_model('kierav/'+config.meta['project']+'/model-'+run.id+':latest', model, api)
+
+    # local save directory
+    savedir = 'data/embeddings/run-'+run.id
+    if not os.path.exists(savedir):
+        os.mkdirs(savedir)
     preds_train = trainer.predict(model=model,dataloaders=data.train_dataloader(shuffle=False))
-    files_train, embeddings_train,embeddings_proj_train = save_predictions(preds_train,wandb.run.dir,'train')
+    files_train, embeddings_train,embeddings_proj_train = save_predictions(preds_train,savedir,'train')
 
     # normalize and project embeddings into 2D for plotting
     projection = random_projection.GaussianRandomProjection(n_components=2)
@@ -98,7 +106,7 @@ def main():
 
     # save predictions for validation
     preds_val = trainer.predict(model=model,dataloaders=data.val_dataloader())
-    files_val, embeddings_val,embeddings_proj_val = save_predictions(preds_val,wandb.run.dir,'val')
+    files_val, embeddings_val,embeddings_proj_val = save_predictions(preds_val,savedir,'val')
 
     # normalize and project embeddings into 2D for plotting
     embeddings_2d_val = projection.transform(embeddings_val)    
@@ -112,7 +120,7 @@ def main():
     wandb.log({"Projection_embeddings_2D_val": wandb.Image(fig4)})
 
     preds_pseudotest = trainer.predict(model=model,dataloaders=data.pseudotest_dataloader())
-    files_pt, embeddings_pt,embeddings_proj_pt = save_predictions(preds_pseudotest,wandb.run.dir,'pseudotest')
+    files_pt, embeddings_pt,embeddings_proj_pt = save_predictions(preds_pseudotest,savedir,'pseudotest')
 
     preds_test = trainer.predict(model=model,dataloaders=data.test_dataloader())
     files_test, embeddings_test,embeddings_proj_test = save_predictions(preds_test,wandb.run.dir,'test')
