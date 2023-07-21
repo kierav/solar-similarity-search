@@ -167,6 +167,8 @@ cython_debug/
 *.csv
 
 wandb/*
+lightning_logs/*
+artifacts/*
 *.ckpt
 
 handouts/*
