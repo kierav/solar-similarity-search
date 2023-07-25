@@ -19,7 +19,7 @@ def split_data(df,val_split,test=''):
     """
         Split dataset into training, validation, hold-out (pseudotest) and test sets.
         The test set can be either 'test_a' which is all data from November and December,
-        or 'test_b' which is >2020, or both combined. The hold-out set is data from
+        or 'test_b' which is >=2021, or both combined. The hold-out set is data from
         Sept 15-Oct 31. The remaining data is split temporally 4:1 into training and 
         validation.
 
@@ -37,7 +37,7 @@ def split_data(df,val_split,test=''):
 
     # hold out test sets
     inds_test_a = (df['sample_time'].dt.month >= 11)
-    inds_test_b = (df['sample_time']>=datetime(2020,1,1))
+    inds_test_b = (df['sample_time']>=datetime(2021,1,1))
     
     # select test set
     if test == 'test_a':
@@ -54,7 +54,7 @@ def split_data(df,val_split,test=''):
     if test == 'test_a':
         inds_pseudotest = ((df_full['sample_time'].dt.month==10)&(df_full['sample_time'].dt.day>26)) | ((df_full['sample_time'].dt.month==1)&(df_full['sample_time'].dt.day<6))
     elif test == 'test_b':
-        inds_pseudotest = (df['sample_time']>=datetime(2019,12,26))
+        inds_pseudotest = (df['sample_time']>=datetime(2020,12,26))
     else:
         inds_pseudotest = (df_full['sample_time'].dt.month==10) | ((df_full['sample_time'].dt.month==9)&(df_full['sample_time'].dt.day>15))
     # inds_pseudotest = (df['sample_time']<datetime(1996,1,1)) | ((df_full['sample_time'].dt.month==10)&(df_full['sample_time'].dt.day>26)) | ((df_full['sample_time'].dt.month==1)&(df_full['sample_time'].dt.day<6))
