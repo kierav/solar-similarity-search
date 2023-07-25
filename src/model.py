@@ -3,7 +3,7 @@ sys.path.append(os.getcwd())
 
 import copy
 from lightly.loss import NegativeCosineSimilarity, NTXentLoss
-from lightly.models.modules import BYOLPredictionHead, BYOLProjectionHead, SimSiamPredictionHead, SimSiamProjectionHead
+from lightly.models.modules import BYOLPredictionHead, BYOLProjectionHead, NNCLRPredictionHead, NNCLRProjectionHead, NNMemoryBankModule, SimSiamPredictionHead, SimSiamProjectionHead
 from lightly.models.utils import deactivate_requires_grad, update_momentum
 from lightly.utils.scheduler import cosine_schedule
 import numpy as np
@@ -165,13 +165,14 @@ class BYOL(pl.LightningModule):
         Calculate SVD of validation set embeddings and find point where 
         singular values have decayed
         """
-        embeddings = torch.cat(self.validation_step_outputs,0).detach().cpu().numpy()
-        # embeddings = embeddings.view(-1,embeddings.shape[-1])
-        embeddings_norm = normalize(embeddings,axis=0)
-        S = np.linalg.svd(embeddings_norm,full_matrices=False,compute_uv=False)
-        svd_collapse = np.argmax(S<(0.05*(S[0]-S[100])+S[100]))
-        self.log('svd_collapse',svd_collapse.astype(np.float32))
-        self.validation_step_outputs.clear()
+        # embeddings = torch.cat(self.validation_step_outputs,0).detach().cpu().numpy()
+        # # embeddings = embeddings.view(-1,embeddings.shape[-1])
+        # embeddings_norm = normalize(embeddings,axis=0)
+        # S = np.linalg.svd(embeddings_norm,full_matrices=False,compute_uv=False)
+        # svd_collapse = np.argmax(S<(0.05*(S[0]-S[100])+S[100]))
+        # self.log('svd_collapse',svd_collapse.astype(np.float32))
+        # self.validation_step_outputs.clear()
+        pass
 
     def test_step(self,batch,batch_idx):
         """
@@ -211,6 +212,150 @@ class BYOL(pl.LightningModule):
         f,x0,_ = batch
         embedding = self.embed(x0)
         embedding_proj = self.forward_momentum(x0)
+        return f,embedding,embedding_proj
+    
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        state_dict = checkpoint["state_dict"]
+        model_state_dict = self.state_dict()
+        is_changed = False
+        for k in state_dict:
+            if k in model_state_dict:
+                if state_dict[k].shape != model_state_dict[k].shape:
+                    state_dict[k] = model_state_dict[k]
+                    is_changed = True
+            else:
+                is_changed = True
+
+        if is_changed:
+            checkpoint.pop("optimizer_states", None)
+
+class NNCLR(pl.LightningModule):
+    """
+        PyTorch Lightning module for self supervision NNCLR model
+
+        Parameters:
+            lr (float):                 learning rate
+            wd (float):                 L2 regularization parameter
+            epochs (int):               Number of epochs for scheduler
+    """
+    def __init__(self, lr=0.1, wd=1e-3,input_channels=1, projection_size=128, prediction_size=128, 
+                 epochs=10, pretrain=False):
+        super().__init__()
+
+        if pretrain:
+            resnet = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
+        else:
+            resnet = torchvision.models.resnet18()
+        # change number of input channels 
+        resnet.conv1 = nn.Conv2d(input_channels,64,kernel_size=(7,7),stride=(2,2),padding=(1,1),bias=False)
+        self.backbone = nn.Sequential(*list(resnet.children())[:-1])
+        self.projection_head = NNCLRProjectionHead(512, 512, projection_size)
+        self.prediction_head = NNCLRPredictionHead(projection_size, 512, prediction_size)
+        self.memory_bank = NNMemoryBankModule(size=4096)
+
+        # define loss function
+        self.loss = NTXentLoss()
+
+        self.epochs = epochs
+        self.lr = lr
+        self.weight_decay = wd
+        self.projection_size=projection_size
+
+        self.save_hyperparameters()
+
+    def forward(self, x):
+        y = self.backbone(x).flatten(start_dim=1)
+        z = self.projection_head(y)
+        p = self.prediction_head(z)
+        z = z.detach()
+        return z, p
+   
+    def embed(self,x):
+        y = self.backbone(x).flatten(start_dim=1)
+        return y
+
+    def training_step(self, batch, batch_idx):
+      
+        _,x0, x1 = batch
+        z0, p0 = self.forward(x0)
+        z1, p1 = self.forward(x1)
+        z0 = self.memory_bank(z0, update=False)
+        z1 = self.memory_bank(z1, update=True)
+
+        loss = 0.5 * (self.loss(z0, p1) + self.loss(z1, p0))        
+
+        self.log_dict({'loss': loss})
+        return loss
+
+    def validation_step(self,batch,batch_idx):
+        """
+            Runs the model on the validation set and logs validation loss 
+            and other metrics.
+
+            Parameters:
+                batch:                  batch from a DataLoader
+                batch_idx:              index of batch                  
+        """
+        _,x0,x1 = batch
+        z0, p0 = self.forward(x0)
+        z1, p1 = self.forward(x1)
+        z0 = self.memory_bank(z0, update=False)
+        z1 = self.memory_bank(z1, update=True)
+
+        val_loss = 0.5 * (self.loss(z0, p1) + self.loss(z1, p0))       
+
+        # calculate the per-dimension standard deviation of the outputs
+        # we can use this later to check whether the embeddings are collapsing
+        output = self.embed(x0)
+
+        output = F.normalize(output, dim=1)
+        output_std = output.std(dim=0)
+        output_std = output_std.mean()
+        collapse_level = max(0.0,1-np.sqrt(512)*output_std)
+
+        self.log_dict({'val_loss':val_loss,
+                       'collapse_level':collapse_level},
+                      on_step=False,on_epoch=True)
+        
+
+    def test_step(self,batch,batch_idx):
+        """
+            Runs the model on the test set and logs test metrics 
+
+            Parameters:
+                batch:                  batch from a DataLoader
+                batch_idx:              index of batch                  
+        """
+        pass
+
+    def configure_optimizers(self):
+        """
+            Sets up the optimizer and learning rate scheduler.
+            
+            Returns:
+                optimizer:              A torch optimizer
+        """
+        # optimizer = optim.Adam(self.model.parameters(),lr=self.lr,weight_decay=self.weight_decay)
+        optimizer = optim.SGD(self.parameters(), lr=self.lr)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer,eta_min=1e-5,T_max=self.epochs)
+        
+        return [optimizer],[scheduler]
+
+    def predict_step(self,batch,batch_idx,dataloader_idx=0):
+        """
+            Forward pass of model for prediction
+
+            Parameters:
+                batch:          batch from a DataLoader
+                batch_idx:      batch index
+                dataloader_idx
+
+            Returns:
+                embedding:      embeddings for batch
+        """
+        f,x0,_ = batch
+        embedding = self.embed(x0)
+        embedding_proj,_ = self.forward(x0)
         return f,embedding,embedding_proj
     
     def on_load_checkpoint(self, checkpoint: dict) -> None:

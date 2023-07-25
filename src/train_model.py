@@ -8,7 +8,7 @@ import wandb
 from sklearn import random_projection
 from sklearn.preprocessing import MinMaxScaler, normalize
 from src.data import TilesDataModule
-from src.model import BYOL, SimSiam
+from src.model import BYOL, SimSiam, NNCLR
 from search_utils.analysis_utils import *
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelSummary, ModelCheckpoint 
@@ -44,17 +44,26 @@ def main():
                            normalize=config.model['pretrain'])
 
     # initialize model
-    model = BYOL(lr=config.training['lr'],
+    # model = BYOL(lr=config.training['lr'],
+    #              wd=config.training['wd'],
+    #              input_channels=config.model['channels'],
+    #              projection_size=config.model['projection_size'],
+    #              prediction_size=config.model['prediction_size'],
+    #              cosine_scheduler_start=config.training['momentum_start'],
+    #              cosine_scheduler_end=config.training['momentum_end'],
+    #              loss=config.training['loss'],
+    #              epochs=config.training['epochs'],
+    #              pretrain=config.model['pretrain'])
+
+    model = NNCLR(lr=config.training['lr'],
                  wd=config.training['wd'],
                  input_channels=config.model['channels'],
                  projection_size=config.model['projection_size'],
                  prediction_size=config.model['prediction_size'],
-                 cosine_scheduler_start=config.training['momentum_start'],
-                 cosine_scheduler_end=config.training['momentum_end'],
-                 loss=config.training['loss'],
                  epochs=config.training['epochs'],
                  pretrain=config.model['pretrain'])
 
+    
     # initialize wandb logger
     wandb_logger = WandbLogger(log_model='all')
     checkpoint_callback = ModelCheckpoint(monitor='val_loss',
@@ -73,7 +82,7 @@ def main():
                          limit_val_batches=400,
                          logger=wandb_logger,
                          deterministic=True,
-                         precision=16)
+                         precision='16-mixed')
     trainer.fit(model=model,datamodule=data)
 
     # save predictions for training
@@ -83,7 +92,8 @@ def main():
     # local save directory
     savedir = 'data/embeddings/run-'+run.id
     if not os.path.exists(savedir):
-        os.mkdirs(savedir)
+        os.makedirs(savedir)
+        
     preds_train = trainer.predict(model=model,dataloaders=data.train_dataloader(shuffle=False))
     files_train, embeddings_train,embeddings_proj_train = save_predictions(preds_train,savedir,'train')
 
