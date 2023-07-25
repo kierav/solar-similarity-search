@@ -7,7 +7,7 @@ import os
 import torch
 import torchvision.transforms.functional as functional
 from sklearn.metrics.pairwise import cosine_similarity
-from image_utils import read_image
+from search_utils.image_utils import read_image
 
 
 def get_scatter_plot_with_thumbnails(embeddings_2d,filenames,root='../'):
@@ -80,12 +80,15 @@ def get_image_as_np_array_with_frame(filename: str, w: int = 5):
     return framed_img
 
 
-def plot_nearest_neighbors_3x3(filenames, embeddings, query, query_type: str, i: int, distType: str, root:str='../'):
-    """Plots the example image and its eight nearest neighbors."""
+def plot_neighbors_3x3(filenames, embeddings, query, query_type: str, i: int, distType: str, root:str='../',nearest=True):
+    """Plots the example image and its eight nearest or furthest neighbors."""
     n_subplots = 9
     # initialize empty figure
     fig = plt.figure()
-    fig.suptitle(f"Nearest Neighbor Plot {i + 1} with {distType} distance")
+    if nearest:
+        fig.suptitle(f"Nearest Neighbor Plot {i + 1} with {distType} distance")
+    else:
+        fig.suptitle(f"Farthest Neighbor Plot {i + 1} with {distType} distance")
     #
     if query_type == 'filename':
         example_idx = np.where(filenames==query)[0]
@@ -105,23 +108,28 @@ def plot_nearest_neighbors_3x3(filenames, embeddings, query, query_type: str, i:
         # distances = [cosine_similarity(np.array([embeddings[i, :]]), np.array([embeddings[example_idx, :]]))[0][0] for i in range(len(embeddings))]
 
     # sort indices by distance to the center
-    nearest_neighbors = np.argsort(distances)[:n_subplots]
+    if nearest:
+        neighbors = np.argsort(distances)[:n_subplots]
+    else:
+        neighbors = np.argsort(distances)[-n_subplots:]
+        print(filenames[neighbors])
     # show images
-    for plot_offset, plot_idx in enumerate(nearest_neighbors):
+    for plot_offset, plot_idx in enumerate(neighbors):
         ax = fig.add_subplot(3, 3, plot_offset + 1)
         # get the corresponding filename
         fname = root + filenames[plot_idx]
         if plot_offset == 0:
             if query_type == 'filename':
                 ax.set_title(f"Query Image")
-            else:
+            elif nearest:
                 ax.set_title(f"Nearest neighbor")
+            else:
+                ax.set_title(f"Farthest neighbor")
             plt.imshow(get_image_as_np_array_with_frame(fname),cmap='gray',vmin=-1000,vmax=1000)
         else:
             plt.imshow(read_image(image_loc=fname, image_format = "npy"),cmap='gray',vmin=-1000,vmax=1000)
         # let's disable the axis
         plt.axis("off")
-
 
 def save_predictions(preds,dir,appendstr:str=''):
     """
