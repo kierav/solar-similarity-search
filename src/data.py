@@ -203,8 +203,11 @@ class TilesDataModule(pl.LightningDataModule):
     def subsample_trainset(self,filenames):
         # given a list of filenames, subsample so the train set only includes files from that list
         subset_filenames = self.df_train['filename'][self.df_train['filename'].isin(filenames)].tolist()
-        self.train_set = TilesDataset(subset_filenames,self.transform,augmentation=self.augmentation,normalize=self.normalize)
+        self.subset_train_set = TilesDataset(subset_filenames,self.transform,augmentation=self.augmentation,normalize=self.normalize)
 
+    def subset_train_dataloader(self,shuffle=True):
+        return DataLoader(self.subset_train_set,batch_size=self.batch_size,num_workers=4,shuffle=shuffle)
+    
     def train_dataloader(self,shuffle=True):
         return DataLoader(self.train_set,batch_size=self.batch_size,num_workers=4,shuffle=shuffle)
     
