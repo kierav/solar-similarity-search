@@ -133,7 +133,7 @@ def main():
     files_pt, embeddings_pt,embeddings_proj_pt = save_predictions(preds_pseudotest,savedir,'pseudotest')
 
     preds_test = trainer.predict(model=model,dataloaders=data.test_dataloader())
-    files_test, embeddings_test,embeddings_proj_test = save_predictions(preds_test,wandb.run.dir,'test')
+    files_test, embeddings_test,embeddings_proj_test = save_predictions(preds_test,savedir,'test')
 
 
     wandb.finish()
