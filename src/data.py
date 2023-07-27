@@ -193,12 +193,17 @@ class TilesDataModule(pl.LightningDataModule):
         
     def setup(self,stage:str):
         # split into training and validation
-        df_test,df_pseudotest,df_train,df_val = split_data(self.df,self.val_split,self.test)
-        self.train_set = TilesDataset(df_train['filename'].tolist(),self.transform,augmentation=self.augmentation,normalize=self.normalize)
+        df_test,df_pseudotest,self.df_train,df_val = split_data(self.df,self.val_split,self.test)
+        self.train_set = TilesDataset(self.df_train['filename'].tolist(),self.transform,augmentation=self.augmentation,normalize=self.normalize)
         self.val_set = TilesDataset(df_val['filename'].tolist(),self.transform,augmentation='single',normalize=self.normalize)
         self.pseudotest_set = TilesDataset(df_pseudotest['filename'].tolist(),self.transform,augmentation='none',normalize=self.normalize)
         self.test_set = TilesDataset(df_test['filename'].tolist(),self.transform,augmentation='none',normalize=self.normalize)
-        self.trainval_set = TilesDataset(pd.concat([df_train,df_val])['filename'].tolist(),self.transform,augmentation='none',normalize=self.normalize)
+        self.trainval_set = TilesDataset(pd.concat([self.df_train,df_val])['filename'].tolist(),self.transform,augmentation='none',normalize=self.normalize)
+
+    def subsample_trainset(self,filenames):
+        # given a list of filenames, subsample so the train set only includes files from that list
+        subset_filenames = self.df_train['filename'][self.df_train['filename'].isin(filenames)].tolist()
+        self.train_set = TilesDataset(subset_filenames,self.transform,augmentation=self.augmentation,normalize=self.normalize)
 
     def train_dataloader(self,shuffle=True):
         return DataLoader(self.train_set,batch_size=self.batch_size,num_workers=4,shuffle=shuffle)

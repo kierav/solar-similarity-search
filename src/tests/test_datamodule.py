@@ -29,6 +29,14 @@ class DatasetTest(unittest.TestCase):
         self.assertIsInstance(self.data.df,pd.DataFrame)
         self.assertIsInstance(self.data.df['sample_time'][0],datetime)
 
+    def test_subsampletrainset(self):
+        self.data.prepare_data()
+        self.data.setup(stage='train')
+        self.assertIsInstance(self.data.train_set,TilesDataset)
+        subset_files = self.data.df_train['filename'][:5]
+        self.data.subsample_trainset(subset_files)
+        self.assertEqual(len(self.data.train_set),len(subset_files))
+
     def tearDown(self):
         '''
             Discards the SDO database after test methods are called
