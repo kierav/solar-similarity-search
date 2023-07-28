@@ -2,8 +2,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import rcParams as rcp
 import matplotlib.offsetbox as osb   
+from multiprocessing import Pool
 import numpy as np
 import os
+import random
 import torch
 import torchvision.transforms.functional as functional
 from sklearn.metrics.pairwise import cosine_similarity
@@ -130,6 +132,89 @@ def plot_neighbors_3x3(filenames, embeddings, query, query_type: str, i: int, di
             plt.imshow(read_image(image_loc=fname, image_format = "npy"),cmap='gray',vmin=-1000,vmax=1000)
         # let's disable the axis
         plt.axis("off")
+
+def cluster_plot(nrows:int, ncols:int, images_list:np.array, dpi:int,root:str='../'):
+  fig,ax = plt.subplots(nrows,ncols,figsize=[ncols, nrows], layout='constrained', dpi=dpi)
+
+  # Shuffle list and use first 16 filepaths to plot images ##?
+  np.random.shuffle(images_list)
+
+  # For loop to go through and use Team Yellow's load image module
+  n = 0
+  for j in range(nrows):
+    for i in range(ncols):
+      if images_list.shape[0] > n:
+        image = read_image(image_loc=root+images_list[n], image_format = "npy")
+        image = np.nan_to_num(image)
+        # print(images_list[n])
+        # Scatter plot
+        ax1 = fig.add_subplot(ax[j, i])
+        ax1.imshow(image,cmap='gray',vmin=-1000,vmax=1000)
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+      else:
+        break
+      n += 1
+
+# find most diverse samples
+def diverse_sampler(filenames, features, n, initial_seed=None):
+    """
+    Parameters:
+        filenames(list): filename
+        features (list): embedded data
+        n (int): number of points to sample from the embedding space
+        initial_seed:   None if start from random point, or an array of length nfeatures
+    Returns:
+
+        result (list): list of n points sampled from the embedding space
+
+    Ref:
+        https://arxiv.org/pdf/2107.03227.pdf
+
+    """
+    filenames_ = np.array(filenames.copy())
+    features_ = np.array(features.copy())
+    if initial_seed is None:
+        result = np.tile(random.choice(features_),(n+1,1))
+    else:
+        result = np.tile(initial_seed,(n+1,1))
+    filenames_results = [None]*(n+1)
+    distances = [1000000] * len(features_)
+    
+    for i in range(n):
+        dist = np.sum((features_ - result[i])**2, axis=1)**0.5
+        distances = np.minimum(distances,dist)
+        idx = np.argmax(distances)
+        result[i+1,:] = features_[idx,:]
+        filenames_results[i+1] = filenames_[idx]
+        
+        features_ = np.delete(features_, idx, axis=0)
+        distances = np.delete(distances, idx, axis=0)
+        filenames_ = np.delete(filenames_, idx, axis=0)
+
+    return filenames_results[1:], np.array(result[1:])
+
+def diverse_sampler_chunked(filenames, features, n, initial_seed=None, ksplits=10):
+    """ 
+    Wrapper around diverse sampler function to perform sampling in parallel
+    The dataset will be split into ksplits and each split will be diversely
+    subsampled. 
+    """
+    
+    inds = np.arange(len(filenames)).astype(int)
+    random.shuffle(inds)
+    k = int(np.ceil(len(inds)/ksplits))
+
+    args = [(np.array(filenames)[inds[i*k:(i+1)*k]],features[inds[i*k:(i+1)*k]],int(n/ksplits),initial_seed) for i in range(ksplits)]
+    
+    filenames_results = []
+    results = []
+    with Pool(5) as pool:
+        for result in pool.starmap(diverse_sampler,args):
+            filenames_results.extend(result[0])
+            results.extend(list(result[1]))
+
+    return filenames_results, np.array(results)
 
 def save_predictions(preds,dir,appendstr:str=''):
     """

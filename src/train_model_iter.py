@@ -104,7 +104,10 @@ def main():
         preds_train = trainer.predict(dataloaders=data.train_dataloader(shuffle=False))
         files_train, embeddings_train,embeddings_proj_train = save_predictions(preds_train,savedir,'train')
         
-        # select diverse subset based on embedding pca
+        # select diverse subset based on embedding pca unless on last iteration
+        if i == config.training['iterations']-1:
+            break
+
         pca = PCA(n_components=6,random_state=42)
         embeddings_pca = pca.fit_transform(embeddings_train)
         subset_files,_ = diverse_sampler(files_train,embeddings_pca,n=int(config.training['train_frac']*len(files_train)))
