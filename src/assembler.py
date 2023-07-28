@@ -11,7 +11,7 @@ class Assembler():
     Takes tile embeddings and reassembles into "image"s of size 
     tile_rows x tile_cols x embedding_dim
     """
-    def __init__(self,tile_dim:int=128,img_dim:int=2048,embedding_dim:int=16,
+    def __init__(self,tile_dim:int=128,img_dim:int=2048,embedding_dim:int=16,reduce:bool=True,
                  data_path:str='data',run:str='',datasets:list=['train','val']):
         self.tile_dim = tile_dim
         self.img_dim = img_dim
@@ -20,20 +20,24 @@ class Assembler():
         if not os.path.exists(self.data_path):
             os.makedirs(self.data_path)
         self.run = run
+        self.reduce = reduce
 
         self.files = []
         self.embedding_files = []
         self.embeddings_proj_files = []
         for dataset in datasets:
-            self.files.append(sorted(glob.glob('wandb/*'+run+'/files/filenames'+dataset+'.csv'))[-1])
-            self.embedding_files.append(sorted(glob.glob('wandb/*'+run+'/files/embeddings'+dataset+'.npy'))[-1])
-            self.embeddings_proj_files.append(sorted(glob.glob('wandb/*'+run+'/files/embeddings_proj'+dataset+'.npy'))[-1])
-        
+            # self.files.append(sorted(glob.glob('wandb/*'+run+'/files/filenames'+dataset+'.csv'))[-1])
+            # self.embedding_files.append(sorted(glob.glob('wandb/*'+run+'/files/embeddings'+dataset+'.npy'))[-1])
+            # self.embeddings_proj_files.append(sorted(glob.glob('wandb/*'+run+'/files/embeddings_proj'+dataset+'.npy'))[-1])
+            self.files.append(sorted(glob.glob('data/embeddings/*'+run+'/filenames'+dataset+'.csv'))[-1])
+            self.embedding_files.append(sorted(glob.glob('data/embeddings/*'+run+'/embeddings'+dataset+'.npy'))[-1])
+            self.embeddings_proj_files.append(sorted(glob.glob('data/embeddings/*'+run+'/embeddings_proj'+dataset+'.npy'))[-1])
+                
         self.df = pd.DataFrame()
         self.embeddings = []
         self.embeddings_proj = []
 
-    def assemble_tiles(self,files,embeddings):
+    def assemble_tiles(self,files,embeddings,dim:int):
         """
         Take tile files and assembles into an "image" of size 
         tile_rows x tile_cols x embedding_dim
@@ -41,13 +45,14 @@ class Assembler():
         Parameters:
             files (list):       list of tile filepaths
             embeddings (list):  list of corresponding embeddings 
+            dim (int)
 
         Returns:
             img (np array):     tile_rows x tile_cols x embedding_dim
         """
         img = np.zeros((self.img_dim//self.tile_dim,
                        self.img_dim//self.tile_dim,
-                       self.embedding_dim))
+                       dim))
         
         for file,embedding in zip(files,embeddings):
             file_split = file.split('/')[-1].strip('.npy').split('_')
@@ -60,7 +65,8 @@ class Assembler():
     def reshape_embedding(self,embeddings,reducer,scaler,fit=True):
         """
         Reshape embedding to specified dimension either by some dimensionality reducer
-        or by padding
+        or by padding. If reduce flag is set to false, then embeddings are returned 
+        unaltered
         
         Parameters:
             embeddings (array):     embeddings to be reshaped
@@ -71,11 +77,14 @@ class Assembler():
         Returns:
             embeddings (array):     reshaped to n samples x embedding dim 
         """
+        if not self.reduce:
+            return embeddings
+        
         if np.shape(embeddings)[1] > self.embedding_dim and fit:
-            embeddings = scaler.fit_transform(embeddings)
+            # embeddings = scaler.fit_transform(embeddings)
             embeddings = reducer.fit_transform(embeddings)
         elif np.shape(embeddings)[1] > self.embedding_dim and not fit:
-            embeddings = scaler.transform(embeddings)
+            # embeddings = scaler.transform(embeddings)
             embeddings = reducer.transform(embeddings)
         else:
             embeddings = np.pad(embeddings,((0,0),(0,self.embedding_dim-np.shape(embeddings)[1])))
@@ -131,8 +140,8 @@ class Assembler():
             embeddings = self.embeddings[inds]
             embeddings_proj = self.embeddings_proj[inds]
 
-            img = self.assemble_tiles(files,embeddings)
-            img_proj = self.assemble_tiles(files,embeddings_proj)
+            img = self.assemble_tiles(files,embeddings,dim=512)
+            img_proj = self.assemble_tiles(files,embeddings_proj,dim=128)
 
             # save image
             np.save(self.data_path+os.sep+parent+'_embedding.npy',img)
@@ -147,11 +156,16 @@ class Assembler():
 
     def save_df(self,dir,filename:str=''):
         """
-        Save dataframe to file
+        Save dataframe to file with labels
         """
+        self.df['dataset'] = self.df['parent'].str.split('_').str[-1]
         self.df.sort_values('sample_time',inplace=True)
         self.df.to_csv(dir+os.sep+'index_'+self.run+'_'+filename+'.csv',index=False)
-
+        
+        labels = pd.read_csv('../idea-lab-flare-forecast/Data/labels_all_smoothed.csv')
+        labels['sample_time'] = pd.to_datetime(labels['sample_time'])
+        labels = labels.merge(self.df,how='inner',on=['sample_time','dataset'])
+        labels.to_csv('../idea-lab-flare-forecast/Data/labels_'+self.data_path+'.csv',index=False)
 
 def parse_args(args=None):
     """
@@ -175,6 +189,10 @@ def parse_args(args=None):
                         default=['train','val','pseudotest','test'],
                         help='datasets to assemble, i.e., train, val, etc.'
                         )
+    parser.add_argument('-re','--reduce',
+                        type=bool,
+                        default=False,
+                        help='flag whether to reduce the embeddings or not')
     parser.add_argument('-e','--embedding_dim',
                         type=int,
                         default=16,
@@ -182,14 +200,18 @@ def parse_args(args=None):
                         )
     parser.add_argument('-d','--data_path',
                         type=str,
-                        help='path to solve assembled files')
+                        help='path to save assembled files')
     return parser.parse_args(args)
 
 
 
 if __name__ == '__main__':
     parser = parse_args()
-    assembler = Assembler(embedding_dim=parser.embedding_dim,run=parser.run,datasets=parser.datasets,data_path=parser.data_path)
+    assembler = Assembler(embedding_dim=parser.embedding_dim,
+                          run=parser.run,
+                          datasets=parser.datasets,
+                          reduce=parser.reduce,
+                          data_path=parser.data_path)
     assembler.create_df()
     assembler.assemble_all()
-    assembler.save_df('data','assembled')
+    assembler.save_df('data','assembledfullembeddings')
