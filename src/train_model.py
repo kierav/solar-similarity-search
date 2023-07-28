@@ -44,24 +44,24 @@ def main():
                            normalize=config.model['pretrain'])
 
     # initialize model
-    # model = BYOL(lr=config.training['lr'],
-    #              wd=config.training['wd'],
-    #              input_channels=config.model['channels'],
-    #              projection_size=config.model['projection_size'],
-    #              prediction_size=config.model['prediction_size'],
-    #              cosine_scheduler_start=config.training['momentum_start'],
-    #              cosine_scheduler_end=config.training['momentum_end'],
-    #              loss=config.training['loss'],
-    #              epochs=config.training['epochs'],
-    #              pretrain=config.model['pretrain'])
-
-    model = NNCLR(lr=config.training['lr'],
+    model = BYOL(lr=config.training['lr'],
                  wd=config.training['wd'],
                  input_channels=config.model['channels'],
                  projection_size=config.model['projection_size'],
                  prediction_size=config.model['prediction_size'],
+                 cosine_scheduler_start=config.training['momentum_start'],
+                 cosine_scheduler_end=config.training['momentum_end'],
+                 loss=config.training['loss'],
                  epochs=config.training['epochs'],
                  pretrain=config.model['pretrain'])
+
+    # model = NNCLR(lr=config.training['lr'],
+    #              wd=config.training['wd'],
+    #              input_channels=config.model['channels'],
+    #              projection_size=config.model['projection_size'],
+    #              prediction_size=config.model['prediction_size'],
+    #              epochs=config.training['epochs'],
+    #              pretrain=config.model['pretrain'])
 
     
     # initialize wandb logger
