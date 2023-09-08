@@ -338,9 +338,9 @@ class SharpsDataModule(pl.LightningDataModule):
         self.df_train = pd.concat([self.df_train,df_val])
 
         # create datasets
-        self.train_set = SharpsDataset(self.df_train,self.base_transform,self.transform,augmentation=self.augmentation,normalize=self.normalize,maxval=self.maxval)
-        self.val_set = SharpsDataset(df_pseudotest,self.base_transform,self.transform,augmentation='single',normalize=self.normalize,maxval=self.maxval)
-        self.test_set = SharpsDataset(df_test,self.base_transform,self.transform,augmentation='none',normalize=self.normalize,maxval=self.maxval)
+        self.train_set = SharpsDataset(self.df_train,self.base_transform,self.transform,augmentation=self.augmentation,maxval=self.maxval)
+        self.val_set = SharpsDataset(df_pseudotest,self.base_transform,self.transform,augmentation='single',maxval=self.maxval)
+        self.test_set = SharpsDataset(df_test,self.base_transform,self.transform,augmentation='none',maxval=self.maxval)
         print('Train:',len(self.train_set),
               'Valid:',len(self.val_set),
               'Test:',len(self.test_set))
@@ -348,7 +348,7 @@ class SharpsDataModule(pl.LightningDataModule):
     def subsample_trainset(self,filenames):
         # given a list of filenames, subsample so the train set only includes files from that list
         subset_df = self.df_train[self.df_train['file'].isin(filenames)]
-        self.subset_train_set = SharpsDataset(subset_df,self.transform,augmentation=self.augmentation,normalize=self.normalize,maxval=self.maxval)
+        self.subset_train_set = SharpsDataset(subset_df,self.base_transform,self.transform,augmentation=self.augmentation,maxval=self.maxval)
 
     def subset_train_dataloader(self,shuffle=True):
         return DataLoader(self.subset_train_set,batch_size=self.batch_size,num_workers=4,shuffle=shuffle)
