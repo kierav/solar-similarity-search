@@ -1,27 +1,29 @@
 data:
   augmentation: double
-  data_path: data/tiles_all
+  data_path: d0/kvandersande/index_sharps.csv
+  maxval: 1000
 meta:
-  group: all_tiles_initial_exp
-  name: cos_bs256_projpredsize128_pt
+  group: sharps-embeddings
+  name: byol_pt_latent128
   outdir: ''
   project: solar-self-similarity
   resume: false
   tags: []
+  id: None
 model:
-  channels: 1
+  channels: 4
   checkpoint_location: None
   load_checkpoint: false
   prediction_size: 128
   projection_size: 128
-  pretrain: True
+  pretrain: true
 testing:
-  eval: false
+  eval: true
 training:
   batch_size: 256
-  epochs: 10
+  epochs: 15
   loss: cos
-  lr: 0.1
+  lr: 0.001
   momentum_end: 1
   momentum_start: 0.99
   wd: 0.0001
