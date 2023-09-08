@@ -5,8 +5,6 @@ import numpy as np
 import torchvision
 from torch import nn
 import wandb
-from sklearn import random_projection
-from sklearn.preprocessing import MinMaxScaler, normalize
 from src.data import SharpsDataModule
 from src.model import BYOL, SimSiam, NNCLR
 from search_utils.analysis_utils import *

@@ -1,7 +1,8 @@
 data:
   augmentation: double
-  data_path: d0/kvandersande/index_sharps.csv
+  data_path: /d0/kvandersande/index_sharps.csv
   maxval: 1000
+  dim: 128
 meta:
   group: sharps-embeddings
   name: byol_pt_latent128

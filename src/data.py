@@ -129,7 +129,7 @@ class TilesDataset(Dataset):
         # scale between 0 and 1
         image = (image+maxval)/2/maxval
         image = np.expand_dims(image,0)
-
+   
         image2 = image.copy()
         image = torch.Tensor(image)
         image2 = torch.Tensor(image2)
@@ -276,12 +276,11 @@ class SharpsDataset(Dataset):
 
         # Clip and normalize magnetogram data
         image = (np.clip(image,-self.maxval,self.maxval)/self.maxval+1)/2
-
-        image = np.transpose(image,(1,2,0))
-
+        
         image2 = image.copy()
         image = torch.Tensor(image)
         image2 = torch.Tensor(image2)
+
 
         if self.augmentation.lower() != 'none':
 
@@ -318,7 +317,7 @@ class SharpsDataModule(pl.LightningDataModule):
         # define data transforms - augmentation for training
         self.transform = transforms.Compose([
             transforms.RandomInvert(p=0.3),
-            transforms.RandomAdjustSharpness(1.5,p=0.3),
+            # transforms.RandomAdjustSharpness(1.5,p=0.3),
             # transforms.RandomApply(torch.nn.ModuleList([
             #      transforms.GaussianBlur(kernel_size=9,sigma=(0.1,4.0)),
             #      ]),p=0.3),
@@ -344,7 +343,7 @@ class SharpsDataModule(pl.LightningDataModule):
         # create datasets
         self.train_set = SharpsDataset(self.df_train,self.transform,augmentation=self.augmentation,normalize=self.normalize,maxval=self.maxval)
         self.val_set = SharpsDataset(df_pseudotest,self.transform,augmentation='single',normalize=self.normalize,maxval=self.maxval)
-        self.test_set = SharpsDataset(df_test,self.transform,self.transform,augmentation='none',normalize=self.normalize,maxval=self.maxval)
+        self.test_set = SharpsDataset(df_test,self.transform,augmentation='none',normalize=self.normalize,maxval=self.maxval)
         print('Train:',len(self.train_set),
               'Valid:',len(self.val_set),
               'Test:',len(self.test_set))
