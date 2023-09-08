@@ -221,8 +221,8 @@ class SharpsDataset(Dataset):
         Pytorch dataset for handling SHARPs magnetograms data 
         
     """
-    def __init__(self, df: pd.DataFrame, transform, augmentation: str='single', 
-                 datatype=np.float32, normalize=False, maxval:float=1000):
+    def __init__(self, df: pd.DataFrame, base_transform, aug_transform, augmentation: str='single', 
+                 datatype=np.float32, maxval:float=1000):
         '''
             Initializes image files in the dataset
             
@@ -239,13 +239,12 @@ class SharpsDataset(Dataset):
                 maxval (float):     value for max scaling (Gauss)
         '''
         self.name_frame = df.loc[:,'file']
-        self.transform = transform
+        self.base_transform = base_transform
+        self.aug_transform = aug_transform
         self.datatype=datatype
         self.augmentation = augmentation
         if self.augmentation is None:
             self.augmentation = 'none'
-        self.norm = transforms.Normalize(mean=(0.485,),std=(0.229,))
-        self.normalize = normalize
         self.maxval = maxval
 
     def __len__(self):
@@ -276,23 +275,19 @@ class SharpsDataset(Dataset):
 
         # Clip and normalize magnetogram data
         image = (np.clip(image,-self.maxval,self.maxval)/self.maxval+1)/2
-        
+        image = np.transpose(image,(1,2,0))
+
         image2 = image.copy()
-        image = torch.Tensor(image)
-        image2 = torch.Tensor(image2)
 
-
-        if self.augmentation.lower() != 'none':
-
-            # aug = Augmentations(image, self.augmentation_list.randomize())
-            # image2, _ = aug.perform_augmentations(fill_void='Nearest')
-            image2 = self.transform(image)
-
-            if self.augmentation.lower() == 'double':
-                image = self.transform(image)    
-
-        if self.normalize:
-            image = self.norm(image)
+        if self.augmentation.lower() == 'none':
+            image = self.base_transform(image)
+            image2 = self.base_transform(image2)
+        elif self.augmentation.lower() == 'single':
+            image = self.base_transform(image)
+            image2 = self.aug_transform(image2)
+        else:
+            image = self.aug_transform(image)
+            image2 = self.aug_transform(image2)    
 
         return file,image,image2
 
@@ -316,16 +311,18 @@ class SharpsDataModule(pl.LightningDataModule):
 
         # define data transforms - augmentation for training
         self.transform = transforms.Compose([
+            transforms.ToTensor(),
             transforms.RandomInvert(p=0.3),
-            # transforms.RandomAdjustSharpness(1.5,p=0.3),
-            # transforms.RandomApply(torch.nn.ModuleList([
-            #      transforms.GaussianBlur(kernel_size=9,sigma=(0.1,4.0)),
-            #      ]),p=0.3),
             transforms.RandomApply(torch.nn.ModuleList([
                  transforms.RandomRotation(degrees=45,fill=0.5)
                  ]),p=0.3),
             transforms.RandomVerticalFlip(p=0.3),
             transforms.ScaleJitter(target_size=(128,128),scale_range=(0.7,1.3),antialias=True),
+            transforms.Resize((dim,dim),antialias=True),
+        ])
+
+        self.base_transform = transforms.Compose([
+            transforms.ToTensor(),
             transforms.Resize((dim,dim),antialias=True),
         ])
 
@@ -341,9 +338,9 @@ class SharpsDataModule(pl.LightningDataModule):
         self.df_train = pd.concat([self.df_train,df_val])
 
         # create datasets
-        self.train_set = SharpsDataset(self.df_train,self.transform,augmentation=self.augmentation,normalize=self.normalize,maxval=self.maxval)
-        self.val_set = SharpsDataset(df_pseudotest,self.transform,augmentation='single',normalize=self.normalize,maxval=self.maxval)
-        self.test_set = SharpsDataset(df_test,self.transform,augmentation='none',normalize=self.normalize,maxval=self.maxval)
+        self.train_set = SharpsDataset(self.df_train,self.base_transform,self.transform,augmentation=self.augmentation,normalize=self.normalize,maxval=self.maxval)
+        self.val_set = SharpsDataset(df_pseudotest,self.base_transform,self.transform,augmentation='single',normalize=self.normalize,maxval=self.maxval)
+        self.test_set = SharpsDataset(df_test,self.base_transform,self.transform,augmentation='none',normalize=self.normalize,maxval=self.maxval)
         print('Train:',len(self.train_set),
               'Valid:',len(self.val_set),
               'Test:',len(self.test_set))
